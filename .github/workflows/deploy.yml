@@ -17,13 +17,70 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          script_stop: true
           script: |
-            php artisan down
-            cp database/database.sqlite database/database-$(date '+%Y-%m-%d_%Hh%Mm%Ss').sqlite
-            composer install --no-interaction --prefer-dist --optimize-autoloader
-            php artisan migrate --force
-            php artisan optimize
-            php artisan reload
-            npm install
-            npm run build
-            php artisan up
+            bash -lc '
+              set -Eeuo pipefail
+
+              APP_DIR="${{ secrets.SSH_APP_PATH }}"
+
+              if [ -z "$APP_DIR" ]; then
+                while IFS= read -r config_path; do
+                  if grep -q "Projeto-Spino/spino-web" "$config_path"; then
+                    APP_DIR="${config_path%/.git/config}"
+                    break
+                  fi
+                done < <(find "$HOME" -maxdepth 7 -type f -path "*/.git/config" -print 2>/dev/null)
+              fi
+
+              if [ -z "$APP_DIR" ] || [ ! -f "$APP_DIR/artisan" ]; then
+                echo "ERRO: não foi possível localizar o diretório do spino-web." >&2
+                echo "Configure o secret SSH_APP_PATH com o caminho absoluto do projeto no servidor." >&2
+                echo "Arquivos artisan encontrados no HOME:" >&2
+                find "$HOME" -maxdepth 7 -type f -name artisan -print 2>/dev/null >&2 || true
+                exit 1
+              fi
+
+              cd "$APP_DIR"
+              echo "Diretório do deploy: $PWD"
+
+              for tool in git php composer npm; do
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                  echo "ERRO: $tool não está disponível no PATH da sessão SSH." >&2
+                  exit 127
+                fi
+              done
+
+              if [ ! -f database/database.sqlite ]; then
+                echo "ERRO: database/database.sqlite não existe em $PWD." >&2
+                exit 1
+              fi
+
+              backup_path="database/database-$(date +%Y-%m-%d_%Hh%Mm%Ss).sqlite"
+              cp -- database/database.sqlite "$backup_path"
+              echo "Backup criado em: $backup_path"
+
+              git pull --ff-only origin main
+
+              maintenance=0
+              restore_application() {
+                if [ "$maintenance" -eq 1 ]; then
+                  php artisan up || true
+                fi
+              }
+              trap restore_application EXIT
+
+              php artisan down
+              maintenance=1
+
+              composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+              php artisan migrate --force
+              npm ci --no-audit --no-fund
+              npm run build
+              php artisan optimize
+              php artisan reload
+
+              php artisan up
+              maintenance=0
+              trap - EXIT
+            '
