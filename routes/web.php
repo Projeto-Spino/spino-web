@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\TeamManagementController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\ManualRuptureResultController;
 use App\Http\Controllers\Admin\TestRunController;
+use App\Http\Controllers\Admin\CompetitionReportController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -58,6 +59,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/admin/juizes', [JudgeManagementController::class, 'index'])->name('admin.judges.index');
         Route::post('/admin/juizes', [JudgeManagementController::class, 'store'])->name('admin.judges.store');
         Route::patch('/admin/juizes/janela-votacao', [JudgeManagementController::class, 'toggleVoting'])->name('admin.judges.toggle-voting');
+        Route::get('/admin/relatorios/resultados', [CompetitionReportController::class, 'index'])->name('admin.reports.results.index');
+        Route::get('/admin/relatorios/resultados.csv', [CompetitionReportController::class, 'export'])->name('admin.reports.results.export');
 
         Route::middleware('can:manage-users')->group(function () {
             Route::get('/admin/organizadores', [OrganizerManagementController::class, 'index'])->name('admin.organizers.index');

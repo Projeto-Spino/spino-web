@@ -2,56 +2,43 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\JudgeVote;
 use App\Models\Team;
+use App\Services\CompetitionRankingService;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AudienceDashboardController extends Controller
 {
-    public function index(): Response
+    public function index(CompetitionRankingService $rankingService): Response
     {
-        $votes = JudgeVote::all();
-        $judgeCount = $votes->count();
-        $aestheticTotals = [];
-        foreach ($votes as $vote) {
-            $aestheticTotals[$vote->first_team_id] = ($aestheticTotals[$vote->first_team_id] ?? 0) + 15;
-            $aestheticTotals[$vote->second_team_id] = ($aestheticTotals[$vote->second_team_id] ?? 0) + 10;
-            $aestheticTotals[$vote->third_team_id] = ($aestheticTotals[$vote->third_team_id] ?? 0) + 5;
-        }
-
-        $teams = Team::where('audit_status', 'approved')->with(['members', 'loadSamples'])->get();
-        $ranking = $teams->map(function (Team $team) use ($aestheticTotals, $judgeCount): array {
-            $aesthetic = $judgeCount ? round(($aestheticTotals[$team->id] ?? 0) / $judgeCount, 2) : 0;
-            $efficiency = (float) ($team->efficiency_score ?? 0);
-            $precision = (float) ($team->precision_score ?? 0);
-            // A telemetria é a fonte preferencial; o registro manual mantém o placar disponível em contingência.
-            $ruptureLoadGrams = $team->actual_load_grams ?? $team->manual_rupture_load_grams;
-
+        $rankedTeams = $rankingService->rankedTeams();
+        $ranking = $rankedTeams->map(function (array $result): array {
+            /** @var Team $team */
+            $team = $result['team'];
             return [
                 'id' => $team->id,
                 'name' => $team->name,
-                'efficiency' => $efficiency,
-                'precision' => $precision,
-                'aesthetic' => $aesthetic,
-                'total' => round($efficiency + $precision + $aesthetic, 2),
-                'actualLoadKg' => $ruptureLoadGrams !== null ? round($ruptureLoadGrams / 1000, 2) : null,
+                'efficiency' => $result['efficiency'],
+                'precision' => $result['precision'],
+                'aesthetic' => $result['aesthetic'],
+                'total' => $result['total'],
+                'actualLoadKg' => $result['ruptureLoadGrams'] !== null ? round($result['ruptureLoadGrams'] / 1000, 2) : null,
                 'declaredLoadKg' => $team->declared_load_grams ? round($team->declared_load_grams / 1000, 2) : null,
                 'members' => $team->members->map(fn ($member) => ['name' => $member->name, 'course' => $member->course])->values(),
                 'ruptureSamples' => $team->loadSamples->sortBy('elapsed_ms')->map(fn ($sample) => [
                     'seconds' => round($sample->elapsed_ms / 1000, 1),
                     'loadKg' => round($sample->load_grams / 1000, 2),
                 ])->values(),
-                'testedAt' => $team->tested_at?->timestamp ?? PHP_INT_MAX,
+                'position' => $result['position'],
             ];
-        })->sort(fn ($a, $b) => [$b['total'], $b['precision'], $b['actualLoadKg'] ?? 0, $b['aesthetic'], -$b['testedAt']] <=> [$a['total'], $a['precision'], $a['actualLoadKg'] ?? 0, $a['aesthetic'], -$a['testedAt']])->values()->map(fn ($team, $index) => [...$team, 'position' => $index + 1]);
+        })->values();
 
         $current = Team::where('test_status', 'running')->with('loadSamples')->first();
 
         return Inertia::render('Public/Dashboard', [
             'ranking' => $ranking,
             'currentTest' => $this->currentTest($current),
-            'completedJudges' => $judgeCount,
+            'completedJudges' => $rankingService->completedJudgeCount(),
         ]);
     }
 

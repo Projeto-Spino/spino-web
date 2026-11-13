@@ -30,6 +30,6 @@ function Metric({ label, value, detail, color }) {
 }
 
 function QuickLinks() {
-    const links = [['Inscrições', 'admin.registrations.index'], ['Organização', 'admin.bridge-audits.index'], ['Juízes e votação', 'admin.judges.index']];
+    const links = [['Inscrições', 'admin.registrations.index'], ['Organização', 'admin.bridge-audits.index'], ['Juízes e votação', 'admin.judges.index'], ['Relatórios e CSV', 'admin.reports.results.index']];
     return <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100"><h2 className="font-bold">Acessos rápidos</h2><div className="mt-3 grid divide-y divide-slate-100">{links.map(([label, routeName]) => <Link key={routeName} href={route(routeName)} className="flex items-center justify-between py-3 text-sm font-semibold text-slate-700 hover:text-sky-700"><span>{label}</span><span>→</span></Link>)}</div></div>;
 }
