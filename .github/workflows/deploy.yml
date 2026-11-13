@@ -25,19 +25,54 @@ jobs:
               APP_DIR="${{ secrets.SSH_APP_PATH }}"
 
               if [ -z "$APP_DIR" ]; then
-                while IFS= read -r config_path; do
-                  if grep -q "Projeto-Spino/spino-web" "$config_path"; then
-                    APP_DIR="${config_path%/.git/config}"
+                search_roots=("$HOME" /var/www /srv /opt /home /www /data /apps /usr/share/nginx)
+
+                for search_root in "${search_roots[@]}"; do
+                  [ -d "$search_root" ] || continue
+
+                  while IFS= read -r artisan_path; do
+                    candidate_dir="${artisan_path%/artisan}"
+
+                    if [ -f "$candidate_dir/.git/config" ] && grep -q "Projeto-Spino/spino-web" "$candidate_dir/.git/config"; then
+                      APP_DIR="$candidate_dir"
+                      break
+                    fi
+
+                    if [ -f "$candidate_dir/config/competition.php" ] && [ -f "$candidate_dir/resources/js/Pages/Public/Dashboard.jsx" ]; then
+                      APP_DIR="$candidate_dir"
+                      break
+                    fi
+                  done < <(find "$search_root" -maxdepth 10 -type f -name artisan -print 2>/dev/null)
+
+                  if [ -n "$APP_DIR" ]; then
                     break
                   fi
-                done < <(find "$HOME" -maxdepth 7 -type f -path "*/.git/config" -print 2>/dev/null)
+                done
+              fi
+
+              if [ -z "$APP_DIR" ] && command -v timeout >/dev/null 2>&1; then
+                while IFS= read -r artisan_path; do
+                  candidate_dir="${artisan_path%/artisan}"
+
+                  if [ -f "$candidate_dir/.git/config" ] && grep -q "Projeto-Spino/spino-web" "$candidate_dir/.git/config"; then
+                    APP_DIR="$candidate_dir"
+                    break
+                  fi
+
+                  if [ -f "$candidate_dir/config/competition.php" ] && [ -f "$candidate_dir/resources/js/Pages/Public/Dashboard.jsx" ]; then
+                    APP_DIR="$candidate_dir"
+                    break
+                  fi
+                done < <(timeout 30s find / -type f -name artisan -print 2>/dev/null || true)
               fi
 
               if [ -z "$APP_DIR" ] || [ ! -f "$APP_DIR/artisan" ]; then
                 echo "ERRO: não foi possível localizar o diretório do spino-web." >&2
                 echo "Configure o secret SSH_APP_PATH com o caminho absoluto do projeto no servidor." >&2
-                echo "Arquivos artisan encontrados no HOME:" >&2
-                find "$HOME" -maxdepth 7 -type f -name artisan -print 2>/dev/null >&2 || true
+                echo "Usuário SSH: $(id -un)" >&2
+                echo "HOME: $HOME" >&2
+                echo "Diretório inicial: $PWD" >&2
+                echo "O usuário SSH não consegue enxergar o projeto nas pastas comuns do servidor." >&2
                 exit 1
               fi
 
