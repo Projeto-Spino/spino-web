@@ -8,6 +8,7 @@ const navigation = [
     { label: 'Ensaios', routeName: 'admin.test-runs.index', active: 'admin.test-runs.*', icon: 'test' },
     { label: 'Rupturas', routeName: 'admin.manual-rupture-results.index', active: 'admin.manual-rupture-results.*', icon: 'rupture' },
     { label: 'Juízes', routeName: 'admin.judges.index', active: 'admin.judges.*', icon: 'judges' },
+    { label: 'Relatórios', routeName: 'admin.reports.results.index', active: 'admin.reports.*', icon: 'report' },
     { label: 'Equipes e pontes', routeName: 'admin.teams.index', active: 'admin.teams.*', icon: 'audit', requiresUserManagement: true },
     { label: 'Organizadores', routeName: 'admin.organizers.index', active: 'admin.organizers.*', icon: 'teams', requiresUserManagement: true },
 ];
@@ -93,6 +94,7 @@ function AdminIcon({ name }) {
         test: 'M5 3h14v4l-4 5v6l-3 3-3-3v-6L5 7V3Zm4 4h6',
         rupture: 'M12 3v10m0 0 4-4m-4 4-4-4M5 19h14M7 19v2m10-2v2',
         judges: 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-7 17c0-4 2.5-7 7-7s7 3 7 7H5Zm14-10 2 2 3-4',
+        report: 'M5 3h14v18H5V3Zm4 5h6M9 12h6M9 16h4',
     };
     return <svg viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>;
 }
