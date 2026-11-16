@@ -79,12 +79,64 @@ jobs:
               cd "$APP_DIR"
               echo "Diretório do deploy: $PWD"
 
-              for tool in git php composer npm; do
-                if ! command -v "$tool" >/dev/null 2>&1; then
-                  echo "ERRO: $tool não está disponível no PATH da sessão SSH." >&2
+              if ! command -v git >/dev/null 2>&1; then
+                echo "ERRO: git não está disponível no PATH da sessão SSH." >&2
+                exit 127
+              fi
+
+              if ! command -v docker >/dev/null 2>&1; then
+                echo "ERRO: Docker não está disponível no host SSH." >&2
+                exit 127
+              fi
+
+              if ! docker info >/dev/null 2>&1; then
+                echo "ERRO: o usuário SSH não possui permissão para acessar o Docker." >&2
+                exit 1
+              fi
+
+              if ! docker compose version >/dev/null 2>&1; then
+                echo "ERRO: o plugin docker compose não está disponível no servidor." >&2
+                exit 127
+              fi
+
+              container_mode="compose"
+              container_id="$(docker compose ps -q app)"
+
+              if [ -z "$container_id" ]; then
+                container_mode="direct"
+
+                for candidate_id in $(docker ps -q); do
+                  if docker exec "$candidate_id" test -f /app/artisan \
+                    && docker exec "$candidate_id" test -f /app/config/competition.php \
+                    && docker exec "$candidate_id" test -f /app/resources/js/Pages/Public/Dashboard.jsx; then
+                    container_id="$candidate_id"
+                    break
+                  fi
+                done
+              fi
+
+              if [ -z "$container_id" ] || [ "$(docker inspect -f "{{.State.Running}}" "$container_id")" != "true" ]; then
+                echo "ERRO: o container do serviço app não está em execução." >&2
+                echo "Execute docker compose up -d --build no diretório $APP_DIR." >&2
+                exit 1
+              fi
+
+              run_app() {
+                if [ "$container_mode" = "compose" ]; then
+                  docker compose exec -T --user laravel app "$@"
+                else
+                  docker exec --user laravel "$container_id" "$@"
+                fi
+              }
+
+              for tool in php composer npm; do
+                if ! run_app "$tool" --version >/dev/null 2>&1; then
+                  echo "ERRO: $tool não está disponível dentro do container app." >&2
                   exit 127
                 fi
               done
+
+              echo "Runtime validado no container: $container_id ($container_mode)"
 
               if [ ! -f database/database.sqlite ]; then
                 echo "ERRO: database/database.sqlite não existe em $PWD." >&2
@@ -100,22 +152,22 @@ jobs:
               maintenance=0
               restore_application() {
                 if [ "$maintenance" -eq 1 ]; then
-                  php artisan up || true
+                  run_app php artisan up || true
                 fi
               }
               trap restore_application EXIT
 
-              php artisan down
+              run_app php artisan down
               maintenance=1
 
-              composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
-              php artisan migrate --force
-              npm ci --no-audit --no-fund
-              npm run build
-              php artisan optimize
-              php artisan reload
+              run_app composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+              run_app php artisan migrate --force
+              run_app npm ci --no-audit --no-fund
+              run_app npm run build
+              run_app php artisan optimize
+              run_app php artisan reload
 
-              php artisan up
+              run_app php artisan up
               maintenance=0
               trap - EXIT
             '
